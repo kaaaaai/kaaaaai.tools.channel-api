@@ -18,7 +18,7 @@ export async function fetchTelegramHtml({ host, channel, before, request = {} })
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'user-agent': 'tg-channel-api/0.1 (+https://github.com/Kaaaaai/tg-channel-api)',
+          'user-agent': 'kaaaaai.tools.channel-api/0.1 (+https://github.com/Kaaaaai/kaaaaai.tools.channel-api)',
         },
       });
       if (!response.ok) throw new Error(`Telegram responded ${response.status}`);

@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { createChannelService } from '../src/service.js';
+import { createStoreFromEnv, hasRedisEnv } from '../src/store.js';
 import { MemoryStore } from '../src/store-memory.js';
 import { parseChannelPage } from '../src/parser.js';
 
@@ -31,6 +32,22 @@ test('parseChannelPage extracts public Telegram posts and channel metadata', asy
 test('runtime dependencies avoid sanitize-html because it breaks Vercel serverless ESM bundling', () => {
   const pkg = require('../package.json');
   assert.equal(pkg.dependencies['sanitize-html'], undefined);
+});
+
+test('createStoreFromEnv falls back to memory when Upstash Redis env is missing', () => {
+  assert.equal(hasRedisEnv({}), false);
+  assert.ok(createStoreFromEnv({}) instanceof MemoryStore);
+  assert.equal(hasRedisEnv({
+    UPSTASH_REDIS_REST_URL: 'https://redis.example.com',
+    UPSTASH_REDIS_REST_TOKEN: 'secret',
+  }), true);
+});
+
+test('createStoreFromEnv throws when REQUIRE_REDIS is true and Redis env is missing', () => {
+  assert.throws(
+    () => createStoreFromEnv({ REQUIRE_REDIS: 'true' }),
+    /Redis is required but missing/,
+  );
 });
 
 test('getPosts serves fresh cache without fetching Telegram', async () => {

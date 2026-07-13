@@ -17,6 +17,7 @@ export function resolveConfig(env = process.env) {
     limit: parseInteger(env.POST_LIMIT, 500),
     staticProxy: env.STATIC_PROXY || '',
     refreshSecret: env.REFRESH_SECRET || '',
+    requireRedis: String(env.REQUIRE_REDIS || '').toLowerCase() === 'true',
   };
 }
 

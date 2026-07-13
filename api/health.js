@@ -1,5 +1,6 @@
 import { resolveConfig } from '../src/config.js';
 import { sendJson, setCors } from '../src/http.js';
+import { hasRedisEnv } from '../src/store.js';
 
 export default function handler(req, res) {
   const config = resolveConfig();
@@ -9,6 +10,7 @@ export default function handler(req, res) {
   return sendJson(res, 200, {
     ok: true,
     channel: config.channel,
-    redisConfigured: Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN),
+    redisConfigured: hasRedisEnv(process.env),
+    requireRedis: config.requireRedis,
   }, 'no-store');
 }

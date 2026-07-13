@@ -11,7 +11,7 @@ export default async function handler(req, res) {
       page: req.query.page,
       pageSize: req.query.page_size || req.query.pageSize,
     });
-    return sendJson(res, 200, result, `public, s-maxage=${config.cacheTtl}, stale-while-revalidate=86400`);
+    return sendJson(res, 200, result, 'no-store');
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }

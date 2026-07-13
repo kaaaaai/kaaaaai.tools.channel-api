@@ -9,6 +9,7 @@ import { createChannelService } from '../src/service.js';
 import { createStoreFromEnv, hasRedisEnv } from '../src/store.js';
 import { MemoryStore } from '../src/store-memory.js';
 import { parseChannelPage } from '../src/parser.js';
+import postsHandler from '../api/posts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -165,4 +166,43 @@ test('getPosts removes cached posts missing from the refreshed Telegram window',
   const result = await service.getPosts({ page: 1, pageSize: 10 });
 
   assert.deepEqual(result.posts.map((post) => post.id), ['101', '99', '1']);
+});
+
+test('posts API disables edge caching so Redis freshness controls updates', async () => {
+  const html = await fixture('channel-page.html');
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    text: async () => html,
+  });
+
+  const headers = new Map();
+  const res = {
+    statusCode: 0,
+    body: undefined,
+    setHeader(name, value) {
+      headers.set(name.toLowerCase(), value);
+    },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    },
+  };
+
+  try {
+    await postsHandler({
+      method: 'GET',
+      headers: {},
+      query: { page: '1', page_size: '20' },
+    }, res);
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(headers.get('cache-control'), 'no-store');
 });

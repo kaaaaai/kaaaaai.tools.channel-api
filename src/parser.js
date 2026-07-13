@@ -85,14 +85,25 @@ export function parseChannelPage(html, options = {}) {
     const plainText = text($, textEl);
 
     if (!id || Number.isNaN(timestamp)) return;
-    if (!textEl.length && !message.find('.tgme_widget_message_photo_wrap').length) return;
-    if (!bodyHtml && !message.find('.tgme_widget_message_photo_wrap').length) return;
+    const hasMedia = message.find('.tgme_widget_message_photo_wrap,.tgme_widget_message_document_wrap').length > 0;
+    if (!textEl.length && !hasMedia) return;
+    if (!bodyHtml && !hasMedia) return;
     if (isSystemMessage(message)) return;
 
     const media = [];
     message.find('.tgme_widget_message_photo_wrap').each((_mediaIndex, mediaElement) => {
       const src = extractBackgroundUrl($(mediaElement).attr('style') || '');
       if (src) media.push({ type: 'image', src: proxyUrl(src, options.staticProxy), alt: '' });
+    });
+    const attachments = [];
+    message.find('.tgme_widget_message_document_wrap').each((_documentIndex, documentElement) => {
+      const documentNode = $(documentElement);
+      attachments.push({
+        type: 'document',
+        title: text($, documentNode.find('.tgme_widget_message_document_title').first()),
+        meta: text($, documentNode.find('.tgme_widget_message_document_extra').first()),
+        url: documentNode.attr('href') || `https://t.me/${options.channel}/${id}`,
+      });
     });
 
     posts.push({
@@ -103,6 +114,7 @@ export function parseChannelPage(html, options = {}) {
       text: plainText,
       tags: extractTags(plainText),
       media,
+      attachments,
       source: {
         telegramUrl: `https://t.me/${options.channel}/${id}`,
       },

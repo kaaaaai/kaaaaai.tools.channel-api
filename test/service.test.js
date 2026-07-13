@@ -28,6 +28,12 @@ test('parseChannelPage extracts public Telegram posts and channel metadata', asy
   assert.equal(payload.posts.some((post) => post.id === '999'), false);
   assert.equal(payload.posts[0].source.telegramUrl, 'https://t.me/unlimitmeme/101');
   assert.deepEqual(payload.posts[0].tags, ['Tools']);
+  assert.deepEqual(payload.posts[0].attachments, [{
+    type: 'document',
+    title: 'Navicat_Premium_17.1.2.dmg',
+    meta: '351.5 MB',
+    url: 'https://t.me/unlimitmeme/101',
+  }]);
   assert.equal(payload.posts[1].media[0].src, 'https://cdn.example.test/static/https%3A%2F%2Fcdn.example.com%2Fimage.jpg');
 });
 

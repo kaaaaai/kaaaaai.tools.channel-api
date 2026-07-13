@@ -37,6 +37,26 @@ function paginate(posts, page, pageSize) {
   };
 }
 
+function buildResponse(payload, page, pageSize, { fromCache = false, stale = false, error = '' } = {}) {
+  const result = paginate(payload.posts, page, pageSize);
+  return {
+    channel: payload.channel,
+    posts: result.items,
+    pagination: {
+      page: result.page,
+      pageSize: result.pageSize,
+      total: result.total,
+      totalItems: payload.posts.length,
+      hasNext: result.page < result.total,
+      hasPrev: result.page > 1,
+    },
+    generatedAt: payload.generatedAt,
+    fromCache,
+    stale,
+    ...(error ? { error } : {}),
+  };
+}
+
 async function refreshPayload(config, fetchHtml, now, previous) {
   let before = '';
   let channel = previous?.channel || { title: '', description: '' };
@@ -62,25 +82,30 @@ export function createChannelService({ store, config, fetchHtml = fetchTelegramH
     async getPosts({ page = 1, pageSize = config.pageSize, refresh = false } = {}) {
       const cached = await store.getPayload(config.channel);
       const canUseCache = cached && !refresh && isFresh(cached, config.cacheTtl, now);
-      const payload = canUseCache ? cached : await refreshPayload(config, fetchHtml, now, cached);
-      if (!canUseCache) await store.setPayload(config.channel, payload);
+      if (canUseCache) return buildResponse(cached, page, pageSize, { fromCache: true });
 
-      const result = paginate(payload.posts, page, pageSize);
-      return {
-        channel: payload.channel,
-        posts: result.items,
-        pagination: {
-          page: result.page,
-          pageSize: result.pageSize,
-          total: result.total,
-          totalItems: payload.posts.length,
-          hasNext: result.page < result.total,
-          hasPrev: result.page > 1,
-        },
-        generatedAt: payload.generatedAt,
-        fromCache: canUseCache,
-        stale: false,
-      };
+      try {
+        const refreshOperation = async () => {
+          const latestCached = await store.getPayload(config.channel);
+          const latestCanUseCache = latestCached && !refresh && isFresh(latestCached, config.cacheTtl, now);
+          if (latestCanUseCache) return latestCached;
+
+          const payload = await refreshPayload(config, fetchHtml, now, latestCached || cached);
+          await store.setPayload(config.channel, payload);
+          return payload;
+        };
+        const payload = typeof store.withRefreshLock === 'function'
+          ? await store.withRefreshLock(config.channel, refreshOperation)
+          : await refreshOperation();
+        return buildResponse(payload, page, pageSize, { fromCache: payload === cached });
+      } catch (error) {
+        if (!cached) throw error;
+        return buildResponse(cached, page, pageSize, {
+          fromCache: true,
+          stale: true,
+          error: error.message || 'Refresh failed',
+        });
+      }
     },
   };
 }

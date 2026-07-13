@@ -47,7 +47,18 @@ function proxyUrl(url, staticProxy) {
   return `${staticProxy}${encodeURIComponent(url)}`;
 }
 
-function sanitizeTelegramHtml(html) {
+function absolutizeTelegramHref(href = '', options = {}) {
+  if (!href || /^https?:\/\//i.test(href)) return href;
+  if (!href.startsWith('/')) return href;
+
+  try {
+    return new URL(href, `https://${options.host || 't.me'}`).toString();
+  } catch {
+    return href;
+  }
+}
+
+function sanitizeTelegramHtml(html, options = {}) {
   const $ = cheerio.load(html, null, false);
 
   $('script,style,iframe,object,embed,link,meta').remove();
@@ -64,9 +75,11 @@ function sanitizeTelegramHtml(html) {
     }
 
     if (tag === 'a') {
-      const href = $(element).attr('href') || '';
+      const href = absolutizeTelegramHref($(element).attr('href') || '', options);
       if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
         $(element).removeAttr('href');
+      } else if (href) {
+        $(element).attr('href', href);
       }
       $(element).attr('target', '_blank');
       $(element).attr('rel', 'noopener noreferrer');
@@ -94,7 +107,7 @@ export function parseChannelPage(html, options = {}) {
     const datetime = message.find('time[datetime]').attr('datetime') || '';
     const timestamp = Date.parse(datetime);
     const textEl = message.find('.tgme_widget_message_text').first();
-    const bodyHtml = sanitizeTelegramHtml(textEl.html() || '');
+    const bodyHtml = sanitizeTelegramHtml(textEl.html() || '', options);
     const plainText = text($, textEl);
 
     if (!id || Number.isNaN(timestamp)) return;

@@ -37,6 +37,7 @@ test('parseChannelPage extracts public Telegram posts and channel metadata', asy
   }]);
   assert.equal(payload.posts[1].media[0].src, 'https://cdn.example.test/static/https%3A%2F%2Fcdn.example.com%2Fimage.jpg');
   assert.deepEqual(payload.posts[2].tags, ['Notion风格头像', '头像', 'Tools']);
+  assert.match(payload.posts[2].html, /href="https:\/\/t\.me\/s\/unlimitmeme\?q=%23Tools"/);
   assert.deepEqual(payload.posts[3].tags, []);
 });
 
@@ -168,6 +169,66 @@ test('getPosts removes cached posts missing from the refreshed Telegram window',
   const result = await service.getPosts({ page: 1, pageSize: 10 });
 
   assert.deepEqual(result.posts.map((post) => post.id), ['101', '99', '1']);
+});
+
+test('getPosts returns stale cache when Telegram refresh fails', async () => {
+  const store = new MemoryStore();
+  await store.setPayload('unlimitmeme', {
+    generatedAt: 1000,
+    channel: { title: 'Cached', description: '' },
+    posts: [{ id: '1', timestamp: 1000, datetime: '1970-01-01T00:00:01.000Z', html: '<p>cached</p>', tags: [], media: [], attachments: [], source: {} }],
+  });
+
+  const service = createChannelService({
+    store,
+    now: () => 120000,
+    fetchHtml: async () => {
+      throw new Error('Telegram down');
+    },
+    config: {
+      channel: 'unlimitmeme',
+      host: 't.me',
+      cacheTtl: 60,
+      pageSize: 20,
+      maxFetchPages: 1,
+      limit: 100,
+    },
+  });
+
+  const result = await service.getPosts({ page: 1, pageSize: 20 });
+
+  assert.deepEqual(result.posts.map((post) => post.id), ['1']);
+  assert.equal(result.fromCache, true);
+  assert.equal(result.stale, true);
+  assert.equal(result.error, 'Telegram down');
+});
+
+test('getPosts refreshes stale payload through store lock when available', async () => {
+  const html = await fixture('channel-page.html');
+  const store = new MemoryStore();
+  let lockCalls = 0;
+  store.withRefreshLock = async (_channel, operation) => {
+    lockCalls += 1;
+    return operation();
+  };
+
+  const service = createChannelService({
+    store,
+    now: () => 120000,
+    fetchHtml: async () => html,
+    config: {
+      channel: 'unlimitmeme',
+      host: 't.me',
+      cacheTtl: 60,
+      pageSize: 20,
+      maxFetchPages: 1,
+      limit: 100,
+    },
+  });
+
+  await service.getPosts({ page: 1, pageSize: 20 });
+
+  assert.equal(lockCalls, 1);
 });
 
 test('posts API disables edge caching so Redis freshness controls updates', async () => {

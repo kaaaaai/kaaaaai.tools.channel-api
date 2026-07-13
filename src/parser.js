@@ -63,13 +63,9 @@ function sanitizeTelegramHtml(html) {
   return ($.root().html() || '').trim();
 }
 
-function isSystemMessage(plainText) {
-  return [
-    /^Channel created$/i,
-    /^Channel photo updated$/i,
-    /^Channel name changed$/i,
-    /^Channel description changed$/i,
-  ].some((pattern) => pattern.test(plainText));
+function isSystemMessage(message) {
+  return message.hasClass('service_message')
+    || message.find('.tgme_widget_message_service_photo').length > 0;
 }
 
 export function parseChannelPage(html, options = {}) {
@@ -91,7 +87,7 @@ export function parseChannelPage(html, options = {}) {
     if (!id || Number.isNaN(timestamp)) return;
     if (!textEl.length && !message.find('.tgme_widget_message_photo_wrap').length) return;
     if (!bodyHtml && !message.find('.tgme_widget_message_photo_wrap').length) return;
-    if (isSystemMessage(plainText)) return;
+    if (isSystemMessage(message)) return;
 
     const media = [];
     message.find('.tgme_widget_message_photo_wrap').each((_mediaIndex, mediaElement) => {

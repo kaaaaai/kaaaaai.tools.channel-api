@@ -1,0 +1,16 @@
+{
+  "name": "tg-channel-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Vercel API template for serving Telegram public channel posts to static blogs.",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.35.3",
+    "cheerio": "^1.0.0",
+    "sanitize-html": "^2.13.1"
+  },
+  "devDependencies": {}
+}

@@ -63,6 +63,15 @@ function sanitizeTelegramHtml(html) {
   return ($.root().html() || '').trim();
 }
 
+function isSystemMessage(plainText) {
+  return [
+    /^Channel created$/i,
+    /^Channel photo updated$/i,
+    /^Channel name changed$/i,
+    /^Channel description changed$/i,
+  ].some((pattern) => pattern.test(plainText));
+}
+
 export function parseChannelPage(html, options = {}) {
   const $ = cheerio.load(html);
   const channelTitle = text($, '.tgme_channel_info_header_title') || options.channel || '';
@@ -82,6 +91,7 @@ export function parseChannelPage(html, options = {}) {
     if (!id || Number.isNaN(timestamp)) return;
     if (!textEl.length && !message.find('.tgme_widget_message_photo_wrap').length) return;
     if (!bodyHtml && !message.find('.tgme_widget_message_photo_wrap').length) return;
+    if (isSystemMessage(plainText)) return;
 
     const media = [];
     message.find('.tgme_widget_message_photo_wrap').each((_mediaIndex, mediaElement) => {

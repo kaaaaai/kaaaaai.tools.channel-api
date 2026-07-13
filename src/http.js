@@ -14,16 +14,16 @@ export function sendJson(res, status, body, cacheControl = '') {
 }
 
 export async function createServiceFromEnv(env = process.env) {
-  const [{ createChannelService }, { RedisStore }] = await Promise.all([
+  const [{ createChannelService }, { createStoreFromEnv }] = await Promise.all([
     import('./service.js'),
-    import('./store-redis.js'),
+    import('./store.js'),
   ]);
   const config = resolveConfig(env);
   return {
     config,
     service: createChannelService({
       config,
-      store: new RedisStore(),
+      store: createStoreFromEnv(env),
     }),
   };
 }

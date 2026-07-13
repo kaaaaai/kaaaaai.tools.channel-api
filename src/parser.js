@@ -16,12 +16,25 @@ function extractPostId(value = '') {
   return match ? match[1] : '';
 }
 
-function extractTags(plainText = '') {
+function normalizeTag(value = '') {
+  return String(value).replace(/^#/, '').trim();
+}
+
+function extractTagsFromLinks($, textEl) {
   const tags = new Set();
-  const re = /(^|\s)#([\p{L}\p{N}_-]+)/gu;
-  let match;
-  while ((match = re.exec(plainText))) tags.add(match[2]);
+  textEl.find('a').each((_index, element) => {
+    const label = text($, element);
+    const href = $(element).attr('href') || '';
+    const tag = normalizeTag(label);
+    if (label.startsWith('#') && tag && (href.includes('q=%23') || !/^https?:\/\//i.test(href))) {
+      tags.add(tag);
+    }
+  });
   return [...tags];
+}
+
+function extractTags($, textEl) {
+  return extractTagsFromLinks($, textEl);
 }
 
 function extractBackgroundUrl(style = '') {
@@ -112,7 +125,7 @@ export function parseChannelPage(html, options = {}) {
       timestamp,
       html: `<div class="bb-channel-content">${bodyHtml}</div>`,
       text: plainText,
-      tags: extractTags(plainText),
+      tags: extractTags($, textEl),
       media,
       attachments,
       source: {

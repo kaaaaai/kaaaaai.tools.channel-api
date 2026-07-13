@@ -24,7 +24,7 @@ test('parseChannelPage extracts public Telegram posts and channel metadata', asy
 
   assert.equal(payload.channel.title, 'KaaaaaiのMeme角落');
   assert.equal(payload.channel.description, '操作主人公在地球 Online 游戏出 Bug 时收集到的一些胡言乱语片段');
-  assert.deepEqual(payload.posts.map((post) => post.id), ['101', '100']);
+  assert.deepEqual(payload.posts.map((post) => post.id), ['101', '100', '99', '98']);
   assert.equal(payload.posts.some((post) => post.id === '1000'), false);
   assert.equal(payload.posts.some((post) => post.id === '999'), false);
   assert.equal(payload.posts[0].source.telegramUrl, 'https://t.me/unlimitmeme/101');
@@ -36,6 +36,8 @@ test('parseChannelPage extracts public Telegram posts and channel metadata', asy
     url: 'https://t.me/unlimitmeme/101',
   }]);
   assert.equal(payload.posts[1].media[0].src, 'https://cdn.example.test/static/https%3A%2F%2Fcdn.example.com%2Fimage.jpg');
+  assert.deepEqual(payload.posts[2].tags, ['Notion风格头像', '头像', 'Tools']);
+  assert.deepEqual(payload.posts[3].tags, []);
 });
 
 test('runtime dependencies avoid sanitize-html because it breaks Vercel serverless ESM bundling', () => {
@@ -121,7 +123,7 @@ test('getPosts refreshes stale cache, merges new posts, and paginates', async ()
 
   assert.equal(requests.length, 1);
   assert.deepEqual(firstPage.posts.map((post) => post.id), ['101', '100']);
-  assert.deepEqual(secondPage.posts.map((post) => post.id), ['99']);
+  assert.deepEqual(secondPage.posts.map((post) => post.id), ['99', '98']);
   assert.equal(firstPage.pagination.total, 2);
   assert.equal(firstPage.fromCache, false);
   assert.equal(secondPage.fromCache, true);

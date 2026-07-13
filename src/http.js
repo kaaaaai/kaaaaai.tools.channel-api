@@ -1,6 +1,4 @@
 import { isOriginAllowed, resolveConfig } from './config.js';
-import { createChannelService } from './service.js';
-import { RedisStore } from './store-redis.js';
 
 export function setCors(req, res, config = resolveConfig()) {
   const origin = req.headers.origin || '';
@@ -15,7 +13,11 @@ export function sendJson(res, status, body, cacheControl = '') {
   res.status(status).json(body);
 }
 
-export function createServiceFromEnv(env = process.env) {
+export async function createServiceFromEnv(env = process.env) {
+  const [{ createChannelService }, { RedisStore }] = await Promise.all([
+    import('./service.js'),
+    import('./store-redis.js'),
+  ]);
   const config = resolveConfig(env);
   return {
     config,

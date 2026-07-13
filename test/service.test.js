@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,7 @@ import { MemoryStore } from '../src/store-memory.js';
 import { parseChannelPage } from '../src/parser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 
 async function fixture(name) {
   return readFile(path.join(__dirname, 'fixtures', name), 'utf8');
@@ -24,6 +26,11 @@ test('parseChannelPage extracts public Telegram posts and channel metadata', asy
   assert.equal(payload.posts[0].source.telegramUrl, 'https://t.me/unlimitmeme/101');
   assert.deepEqual(payload.posts[0].tags, ['Tools']);
   assert.equal(payload.posts[1].media[0].src, 'https://cdn.example.test/static/https%3A%2F%2Fcdn.example.com%2Fimage.jpg');
+});
+
+test('runtime dependencies avoid sanitize-html because it breaks Vercel serverless ESM bundling', () => {
+  const pkg = require('../package.json');
+  assert.equal(pkg.dependencies['sanitize-html'], undefined);
 });
 
 test('getPosts serves fresh cache without fetching Telegram', async () => {

@@ -9,8 +9,7 @@
   },
   "dependencies": {
     "@upstash/redis": "^1.35.3",
-    "cheerio": "^1.0.0",
-    "sanitize-html": "^2.13.1"
+    "cheerio": "^1.0.0"
   },
   "devDependencies": {}
 }

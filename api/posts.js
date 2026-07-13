@@ -1,7 +1,7 @@
 import { createServiceFromEnv, sendJson, setCors } from '../src/http.js';
 
 export default async function handler(req, res) {
-  const { config, service } = createServiceFromEnv();
+  const { config, service } = await createServiceFromEnv();
   setCors(req, res, config);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'GET') return sendJson(res, 405, { error: 'Method not allowed' });

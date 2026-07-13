@@ -1,5 +1,11 @@
 import * as cheerio from 'cheerio';
-import sanitizeHtml from 'sanitize-html';
+
+const ALLOWED_TAGS = new Set(['a', 'b', 'br', 'code', 'em', 'i', 'p', 'pre', 's', 'span', 'strong', 'u']);
+const ALLOWED_ATTRS = {
+  a: new Set(['href']),
+  span: new Set(['class']),
+  code: new Set(['class']),
+};
 
 function text($, element) {
   return $(element).text().replace(/\s+/g, ' ').trim();
@@ -29,24 +35,32 @@ function proxyUrl(url, staticProxy) {
 }
 
 function sanitizeTelegramHtml(html) {
-  return sanitizeHtml(html, {
-    allowedTags: ['a', 'b', 'br', 'code', 'em', 'i', 'p', 'pre', 's', 'span', 'strong', 'u'],
-    allowedAttributes: {
-      a: ['href', 'target', 'rel'],
-      span: ['class'],
-      code: ['class'],
-    },
-    transformTags: {
-      a: (_tagName, attribs) => ({
-        tagName: 'a',
-        attribs: {
-          href: attribs.href || '',
-          target: '_blank',
-          rel: 'noopener noreferrer',
-        },
-      }),
-    },
-  }).trim();
+  const $ = cheerio.load(html, null, false);
+
+  $('script,style,iframe,object,embed,link,meta').remove();
+  $('*').each((_index, element) => {
+    const tag = element.tagName && element.tagName.toLowerCase();
+    if (!ALLOWED_TAGS.has(tag)) {
+      $(element).replaceWith($(element).contents());
+      return;
+    }
+
+    const allowed = ALLOWED_ATTRS[tag] || new Set();
+    for (const name of Object.keys(element.attribs || {})) {
+      if (!allowed.has(name)) $(element).removeAttr(name);
+    }
+
+    if (tag === 'a') {
+      const href = $(element).attr('href') || '';
+      if (!/^https?:\/\//i.test(href) && !href.startsWith('/')) {
+        $(element).removeAttr('href');
+      }
+      $(element).attr('target', '_blank');
+      $(element).attr('rel', 'noopener noreferrer');
+    }
+  });
+
+  return ($.root().html() || '').trim();
 }
 
 export function parseChannelPage(html, options = {}) {

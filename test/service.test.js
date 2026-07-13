@@ -125,3 +125,44 @@ test('getPosts refreshes stale cache, merges new posts, and paginates', async ()
   assert.equal(firstPage.fromCache, false);
   assert.equal(secondPage.fromCache, true);
 });
+
+test('getPosts removes cached posts missing from the refreshed Telegram window', async () => {
+  const store = new MemoryStore();
+  await store.setPayload('unlimitmeme', {
+    generatedAt: 1000,
+    channel: { title: 'Cached', description: '' },
+    posts: [
+      { id: '101', timestamp: 101000, datetime: '1970-01-01T00:01:41.000Z', html: '<p>kept recent</p>', tags: [], media: [], attachments: [], source: {} },
+      { id: '100', timestamp: 100000, datetime: '1970-01-01T00:01:40.000Z', html: '<p>deleted remotely</p>', tags: [], media: [], attachments: [], source: {} },
+      { id: '99', timestamp: 99000, datetime: '1970-01-01T00:01:39.000Z', html: '<p>kept fetched</p>', tags: [], media: [], attachments: [], source: {} },
+      { id: '1', timestamp: 1000, datetime: '1970-01-01T00:00:01.000Z', html: '<p>older than refreshed window</p>', tags: [], media: [], attachments: [], source: {} },
+    ],
+  });
+
+  const service = createChannelService({
+    store,
+    now: () => 120000,
+    fetchHtml: async () => `
+      <div class="tgme_widget_message" data-post="unlimitmeme/101">
+        <time datetime="1970-01-01T00:01:41.000Z"></time>
+        <div class="tgme_widget_message_text">kept recent</div>
+      </div>
+      <div class="tgme_widget_message" data-post="unlimitmeme/99">
+        <time datetime="1970-01-01T00:01:39.000Z"></time>
+        <div class="tgme_widget_message_text">kept fetched</div>
+      </div>
+    `,
+    config: {
+      channel: 'unlimitmeme',
+      host: 't.me',
+      cacheTtl: 60,
+      pageSize: 10,
+      maxFetchPages: 1,
+      limit: 100,
+    },
+  });
+
+  const result = await service.getPosts({ page: 1, pageSize: 10 });
+
+  assert.deepEqual(result.posts.map((post) => post.id), ['101', '99', '1']);
+});

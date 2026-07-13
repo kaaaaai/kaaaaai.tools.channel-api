@@ -13,6 +13,17 @@ function mergePosts(existing = [], incoming = []) {
   return [...byId.values()].sort((a, b) => b.timestamp - a.timestamp);
 }
 
+function reconcilePosts(existing = [], incoming = []) {
+  if (!incoming.length) return existing;
+
+  const incomingIds = new Set(incoming.map((post) => post.id));
+  const oldestIncomingTimestamp = Math.min(...incoming.map((post) => post.timestamp));
+  const retained = existing.filter((post) => (
+    post.timestamp < oldestIncomingTimestamp || incomingIds.has(post.id)
+  ));
+  return mergePosts(retained, incoming);
+}
+
 function paginate(posts, page, pageSize) {
   const safePage = Math.max(1, Number(page) || 1);
   const safePageSize = Math.max(1, Math.min(100, Number(pageSize) || 20));
@@ -29,18 +40,19 @@ function paginate(posts, page, pageSize) {
 async function refreshPayload(config, fetchHtml, now, previous) {
   let before = '';
   let channel = previous?.channel || { title: '', description: '' };
-  let posts = previous?.posts || [];
+  const fetchedPosts = [];
 
   for (let index = 0; index < config.maxFetchPages; index += 1) {
     const html = await fetchHtml({ host: config.host, channel: config.channel, before });
     const page = parseChannelPage(html, config);
     if (page.channel.title) channel = page.channel;
-    posts = mergePosts(posts, page.posts);
+    fetchedPosts.push(...page.posts);
     const oldest = page.posts[page.posts.length - 1];
     if (!oldest || before === oldest.id) break;
     before = oldest.id;
   }
 
+  let posts = reconcilePosts(previous?.posts || [], fetchedPosts);
   if (config.limit) posts = posts.slice(0, config.limit);
   return { generatedAt: now(), channel, posts };
 }

@@ -80,6 +80,8 @@ export function parseChannelPage(html, options = {}) {
     const plainText = text($, textEl);
 
     if (!id || Number.isNaN(timestamp)) return;
+    if (!textEl.length && !message.find('.tgme_widget_message_photo_wrap').length) return;
+    if (!bodyHtml && !message.find('.tgme_widget_message_photo_wrap').length) return;
 
     const media = [];
     message.find('.tgme_widget_message_photo_wrap').each((_mediaIndex, mediaElement) => {

@@ -172,24 +172,31 @@ Response:
 
 ### `GET /api/posts/random`
 
-Returns one random post from the most recent pool. `pool_size` defaults to `PAGE_SIZE` and is clamped to the same 1–100 range as regular pagination.
+Returns random posts from the most recent pool. `pool_size` defaults to `PAGE_SIZE` and is clamped to 1–100. Optional `count` is clamped to 1–10.
 
 ```http
-GET /api/posts/random?pool_size=20
+GET /api/posts/random?pool_size=20&count=5
 ```
 
-The `post` field uses the same normalized post shape as `/api/posts`; it is `null` when the channel has no posts.
+When `count` is omitted, the endpoint preserves the legacy response and returns only `post`. When `count` is explicitly provided, it also returns `posts` and the actual `count`; `post` remains the first selected item. Sampling is without replacement. If fewer unique posts are available, all available posts are returned.
 
 ```json
 {
   "channel": { "title": "Channel title", "description": "" },
   "post": { "id": "101", "text": "Hello" },
+  "posts": [
+    { "id": "101", "text": "Hello" },
+    { "id": "98", "text": "Another moment" }
+  ],
+  "count": 2,
   "poolSize": 20,
   "generatedAt": 1760000000000,
   "fromCache": true,
   "stale": false
 }
 ```
+
+An empty batch returns `post: null`, `posts: []`, and `count: 0`.
 
 ### `POST /api/refresh`
 

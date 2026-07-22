@@ -172,24 +172,31 @@ GET /api/posts?page=1&page_size=20
 
 ### `GET /api/posts/random`
 
-从最近的消息池中随机返回一条消息。`pool_size` 默认使用 `PAGE_SIZE`，并与普通分页一样限制在 1 到 100 之间。
+从最近的消息池中随机返回消息。`pool_size` 默认使用 `PAGE_SIZE` 并限制在 1–100；可选的 `count` 限制在 1–10。
 
 ```http
-GET /api/posts/random?pool_size=20
+GET /api/posts/random?pool_size=20&count=5
 ```
 
-响应中的 `post` 使用与 `/api/posts` 相同的标准化消息结构；频道没有消息时为 `null`。
+省略 `count` 时，接口保持旧响应结构，只返回 `post`。显式传入 `count` 时，响应会增加 `posts` 和实际的 `count`，同时保留第一条消息作为 `post`。抽样不重复；可用的唯一消息少于请求数量时返回全部可用消息。
 
 ```json
 {
   "channel": { "title": "Channel title", "description": "" },
   "post": { "id": "101", "text": "Hello" },
+  "posts": [
+    { "id": "101", "text": "Hello" },
+    { "id": "98", "text": "Another moment" }
+  ],
+  "count": 2,
   "poolSize": 20,
   "generatedAt": 1760000000000,
   "fromCache": true,
   "stale": false
 }
 ```
+
+空批次返回 `post: null`、`posts: []` 和 `count: 0`。
 
 ### `POST /api/refresh`
 

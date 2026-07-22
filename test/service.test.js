@@ -504,13 +504,29 @@ test('random posts API exposes the public route and disables edge caching', asyn
       headers: {},
       query: { pool_size: '2' },
     }, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.post.id, '101');
+    assert.equal(res.body.poolSize, 2);
+    assert.equal(Object.hasOwn(res.body, 'posts'), false);
+    assert.equal(Object.hasOwn(res.body, 'count'), false);
+    assert.equal(headers.get('cache-control'), 'no-store');
+
+    await randomPostHandler({
+      method: 'GET',
+      headers: {},
+      query: { pool_size: '4', count: '3' },
+    }, res);
   } finally {
     global.fetch = originalFetch;
     Math.random = originalRandom;
   }
 
   assert.equal(res.statusCode, 200);
-  assert.equal(res.body.post.id, '101');
-  assert.equal(res.body.poolSize, 2);
+  assert.equal(res.body.posts.length, 3);
+  assert.equal(new Set(res.body.posts.map(post => post.id)).size, 3);
+  assert.equal(res.body.post.id, res.body.posts[0].id);
+  assert.equal(res.body.count, 3);
+  assert.equal(res.body.poolSize, 4);
   assert.equal(headers.get('cache-control'), 'no-store');
 });

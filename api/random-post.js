@@ -7,9 +7,12 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return sendJson(res, 405, { error: 'Method not allowed' });
 
   try {
-    const result = await service.getRandomPost({
-      poolSize: req.query.pool_size || req.query.poolSize,
-    });
+    const query = req.query || {};
+    const poolSize = query.pool_size || query.poolSize;
+    const hasCount = Object.prototype.hasOwnProperty.call(query, 'count');
+    const result = hasCount
+      ? await service.getRandomPosts({ poolSize, count: query.count })
+      : await service.getRandomPost({ poolSize });
     return sendJson(res, 200, result, 'no-store');
   } catch (error) {
     return sendJson(res, 500, { error: error.message });

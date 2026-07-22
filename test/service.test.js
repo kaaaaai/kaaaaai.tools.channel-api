@@ -167,6 +167,106 @@ test('getRandomPost selects only from the requested recent pool', async () => {
   assert.equal(result.fromCache, true);
 });
 
+test('getRandomPosts samples unique posts from only the requested recent pool', async () => {
+  const store = new MemoryStore();
+  await store.setPayload('unlimitmeme', {
+    generatedAt: 1000,
+    channel: { title: 'Cached', description: '' },
+    posts: Array.from({ length: 8 }, (_, index) => ({
+      id: String(8 - index),
+      timestamp: 8000 - index,
+      datetime: '1970-01-01T00:00:08.000Z',
+      text: `post-${8 - index}`,
+      html: `<p>post-${8 - index}</p>`,
+      tags: [], media: [], attachments: [], source: {},
+    })),
+  });
+  const values = [0.8, 0, 0.6, 0.2, 0.9];
+  let randomIndex = 0;
+  const service = createChannelService({
+    store,
+    now: () => 1200,
+    random: () => values[randomIndex++],
+    config: {
+      channel: 'unlimitmeme', cacheTtl: 60, pageSize: 20,
+      maxFetchPages: 1, limit: 100,
+    },
+  });
+
+  const result = await service.getRandomPosts({ poolSize: 6, count: 5 });
+
+  assert.equal(result.posts.length, 5);
+  assert.equal(new Set(result.posts.map(post => post.id)).size, 5);
+  assert.equal(result.posts.every(post => Number(post.id) >= 3), true);
+  assert.equal(result.post, result.posts[0]);
+  assert.equal(result.count, 5);
+  assert.equal(result.poolSize, 6);
+  assert.equal(result.fromCache, true);
+});
+
+test('getRandomPosts clamps count, deduplicates ids, and returns all available unique posts', async () => {
+  const store = new MemoryStore();
+  await store.setPayload('unlimitmeme', {
+    generatedAt: 1000,
+    channel: { title: 'Cached', description: '' },
+    posts: [
+      { id: '3', timestamp: 3, text: 'three' },
+      { id: ' 3 ', timestamp: 2, text: 'duplicate three' },
+      { id: '2', timestamp: 1, text: 'two' },
+    ],
+  });
+  const config = {
+    channel: 'unlimitmeme', cacheTtl: 60, pageSize: 20,
+    maxFetchPages: 1, limit: 100,
+  };
+  const service = createChannelService({ store, now: () => 1200, random: () => 0, config });
+
+  const maximum = await service.getRandomPosts({ count: 999 });
+  const minimum = await service.getRandomPosts({ count: 0 });
+
+  assert.deepEqual(maximum.posts.map(post => String(post.id).trim()), ['3', '2']);
+  assert.equal(maximum.count, 2);
+  assert.equal(minimum.count, 1);
+
+  const emptyStore = new MemoryStore();
+  await emptyStore.setPayload('unlimitmeme', {
+    generatedAt: 1000,
+    channel: { title: 'Empty', description: '' },
+    posts: [],
+  });
+  const empty = await createChannelService({
+    store: emptyStore, now: () => 1200, random: () => 0, config,
+  }).getRandomPosts({ count: 5 });
+
+  assert.equal(empty.post, null);
+  assert.deepEqual(empty.posts, []);
+  assert.equal(empty.count, 0);
+});
+
+test('getRandomPost preserves the legacy response shape', async () => {
+  const store = new MemoryStore();
+  await store.setPayload('unlimitmeme', {
+    generatedAt: 1000,
+    channel: { title: 'Cached', description: '' },
+    posts: [{ id: '1', timestamp: 1, text: 'one' }],
+  });
+  const service = createChannelService({
+    store,
+    now: () => 1200,
+    random: () => 0,
+    config: {
+      channel: 'unlimitmeme', cacheTtl: 60, pageSize: 20,
+      maxFetchPages: 1, limit: 100,
+    },
+  });
+
+  const result = await service.getRandomPost({ poolSize: 20 });
+
+  assert.equal(result.post.id, '1');
+  assert.equal(Object.hasOwn(result, 'posts'), false);
+  assert.equal(Object.hasOwn(result, 'count'), false);
+});
+
 test('getRandomPost clamps oversized pools and handles an empty channel', async () => {
   const populatedStore = new MemoryStore();
   await populatedStore.setPayload('unlimitmeme', {

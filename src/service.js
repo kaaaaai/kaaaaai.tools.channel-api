@@ -37,6 +37,30 @@ function paginate(posts, page, pageSize) {
   };
 }
 
+function normalizeSampleCount(value) {
+  const parsed = Math.trunc(Number(value));
+  return Number.isFinite(parsed) ? Math.max(1, Math.min(10, parsed)) : 1;
+}
+
+function samplePostsWithoutReplacement(posts, count, random) {
+  const unique = new Map();
+  for (const post of posts) {
+    const id = String(post?.id || '').trim();
+    if (id && !unique.has(id)) unique.set(id, post);
+  }
+
+  const candidates = [...unique.values()];
+  const limit = Math.min(normalizeSampleCount(count), candidates.length);
+  for (let index = 0; index < limit; index += 1) {
+    const remaining = candidates.length - index;
+    const rawOffset = Math.floor(random() * remaining);
+    const offset = Math.max(0, Math.min(remaining - 1, rawOffset));
+    const selected = index + offset;
+    [candidates[index], candidates[selected]] = [candidates[selected], candidates[index]];
+  }
+  return candidates.slice(0, limit);
+}
+
 function buildResponse(payload, page, pageSize, { fromCache = false, stale = false, error = '' } = {}) {
   const result = paginate(payload.posts, page, pageSize);
   return {
@@ -113,12 +137,14 @@ export function createChannelService({
     }
   };
 
-  const getRandomPost = async ({ poolSize = config.pageSize } = {}) => {
+  const getRandomPosts = async ({ poolSize = config.pageSize, count = 1 } = {}) => {
     const result = await getPosts({ page: 1, pageSize: poolSize });
-    const index = result.posts.length ? Math.floor(random() * result.posts.length) : -1;
+    const posts = samplePostsWithoutReplacement(result.posts, count, random);
     return {
       channel: result.channel,
-      post: index >= 0 ? result.posts[index] : null,
+      post: posts[0] || null,
+      posts,
+      count: posts.length,
       poolSize: result.posts.length,
       generatedAt: result.generatedAt,
       fromCache: result.fromCache,
@@ -127,8 +153,14 @@ export function createChannelService({
     };
   };
 
+  const getRandomPost = async ({ poolSize = config.pageSize } = {}) => {
+    const { posts, count, ...legacy } = await getRandomPosts({ poolSize, count: 1 });
+    return legacy;
+  };
+
   return {
     getPosts,
     getRandomPost,
+    getRandomPosts,
   };
 }

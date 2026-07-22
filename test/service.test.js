@@ -195,6 +195,7 @@ test('getRandomPosts samples unique posts from only the requested recent pool', 
 
   const result = await service.getRandomPosts({ poolSize: 6, count: 5 });
 
+  assert.deepEqual(result.posts.map(post => post.id), ['4', '7', '8', '5', '3']);
   assert.equal(result.posts.length, 5);
   assert.equal(new Set(result.posts.map(post => post.id)).size, 5);
   assert.equal(result.posts.every(post => Number(post.id) >= 3), true);
@@ -202,9 +203,38 @@ test('getRandomPosts samples unique posts from only the requested recent pool', 
   assert.equal(result.count, 5);
   assert.equal(result.poolSize, 6);
   assert.equal(result.fromCache, true);
+  assert.equal(randomIndex, 5);
 });
 
-test('getRandomPosts clamps count, deduplicates ids, and returns all available unique posts', async () => {
+test('getRandomPosts clamps service count values to one through ten', async () => {
+  const store = new MemoryStore();
+  await store.setPayload('unlimitmeme', {
+    generatedAt: 1000,
+    channel: { title: 'Cached', description: '' },
+    posts: Array.from({ length: 11 }, (_, index) => ({
+      id: String(11 - index), timestamp: 11 - index, text: `post-${11 - index}`,
+    })),
+  });
+  const config = {
+    channel: 'unlimitmeme', cacheTtl: 60, pageSize: 20,
+    maxFetchPages: 1, limit: 100,
+  };
+  const service = createChannelService({ store, now: () => 1200, random: () => 0, config });
+
+  const maximum = await service.getRandomPosts({ count: 999 });
+  const minimum = await service.getRandomPosts({ count: 0 });
+  const invalid = await service.getRandomPosts({ count: 'invalid' });
+  const omitted = await service.getRandomPosts();
+
+  assert.equal(maximum.posts.length, 10);
+  assert.equal(new Set(maximum.posts.map(post => post.id)).size, 10);
+  assert.equal(maximum.count, 10);
+  assert.equal(minimum.count, 1);
+  assert.equal(invalid.count, 1);
+  assert.equal(omitted.count, 1);
+});
+
+test('getRandomPosts deduplicates ids and returns fewer posts when unique candidates are exhausted', async () => {
   const store = new MemoryStore();
   await store.setPayload('unlimitmeme', {
     generatedAt: 1000,
@@ -221,12 +251,10 @@ test('getRandomPosts clamps count, deduplicates ids, and returns all available u
   };
   const service = createChannelService({ store, now: () => 1200, random: () => 0, config });
 
-  const maximum = await service.getRandomPosts({ count: 999 });
-  const minimum = await service.getRandomPosts({ count: 0 });
+  const result = await service.getRandomPosts({ count: 5 });
 
-  assert.deepEqual(maximum.posts.map(post => String(post.id).trim()), ['3', '2']);
-  assert.equal(maximum.count, 2);
-  assert.equal(minimum.count, 1);
+  assert.deepEqual(result.posts.map(post => String(post.id).trim()), ['3', '2']);
+  assert.equal(result.count, 2);
 
   const emptyStore = new MemoryStore();
   await emptyStore.setPayload('unlimitmeme', {
@@ -481,52 +509,80 @@ test('random posts API exposes the public route and disables edge caching', asyn
   });
   Math.random = () => 0;
 
-  const headers = new Map();
-  const res = {
-    statusCode: 0,
-    body: undefined,
-    setHeader(name, value) {
-      headers.set(name.toLowerCase(), value);
-    },
-    status(code) {
-      this.statusCode = code;
-      return this;
-    },
-    json(body) {
-      this.body = body;
-      return this;
-    },
+  const createResponse = () => {
+    const headers = new Map();
+    return {
+      headers,
+      statusCode: 0,
+      body: undefined,
+      setHeader(name, value) {
+        headers.set(name.toLowerCase(), value);
+      },
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(body) {
+        this.body = body;
+        return this;
+      },
+    };
   };
 
   try {
+    const legacyRes = createResponse();
     await randomPostHandler({
       method: 'GET',
       headers: {},
       query: { pool_size: '2' },
-    }, res);
+    }, legacyRes);
 
-    assert.equal(res.statusCode, 200);
-    assert.equal(res.body.post.id, '101');
-    assert.equal(res.body.poolSize, 2);
-    assert.equal(Object.hasOwn(res.body, 'posts'), false);
-    assert.equal(Object.hasOwn(res.body, 'count'), false);
-    assert.equal(headers.get('cache-control'), 'no-store');
+    assert.equal(legacyRes.statusCode, 200);
+    assert.equal(legacyRes.body.post.id, '101');
+    assert.equal(legacyRes.body.poolSize, 2);
+    assert.equal(Object.hasOwn(legacyRes.body, 'posts'), false);
+    assert.equal(Object.hasOwn(legacyRes.body, 'count'), false);
+    assert.equal(legacyRes.headers.get('cache-control'), 'no-store');
 
+    const batchRes = createResponse();
     await randomPostHandler({
       method: 'GET',
       headers: {},
       query: { pool_size: '4', count: '3' },
-    }, res);
+    }, batchRes);
+
+    assert.equal(batchRes.statusCode, 200);
+    assert.equal(batchRes.body.posts.length, 3);
+    assert.equal(new Set(batchRes.body.posts.map(post => post.id)).size, 3);
+    assert.equal(batchRes.body.post.id, batchRes.body.posts[0].id);
+    assert.equal(batchRes.body.count, 3);
+    assert.equal(batchRes.body.poolSize, 4);
+    assert.equal(batchRes.headers.get('cache-control'), 'no-store');
+
+    const falsyCountRes = createResponse();
+    await randomPostHandler({
+      method: 'GET',
+      headers: {},
+      query: { pool_size: '4', count: '' },
+    }, falsyCountRes);
+
+    assert.equal(falsyCountRes.statusCode, 200);
+    assert.equal(Array.isArray(falsyCountRes.body.posts), true);
+    assert.equal(falsyCountRes.body.count, 1);
+    assert.equal(falsyCountRes.headers.get('cache-control'), 'no-store');
+
+    const inheritedCountRes = createResponse();
+    await randomPostHandler({
+      method: 'GET',
+      headers: {},
+      query: Object.assign(Object.create({ count: '3' }), { pool_size: '2' }),
+    }, inheritedCountRes);
+
+    assert.equal(Object.hasOwn(inheritedCountRes.body, 'posts'), false);
+    assert.equal(Object.hasOwn(inheritedCountRes.body, 'count'), false);
+    assert.equal(inheritedCountRes.headers.get('cache-control'), 'no-store');
   } finally {
     global.fetch = originalFetch;
     Math.random = originalRandom;
   }
-
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.body.posts.length, 3);
-  assert.equal(new Set(res.body.posts.map(post => post.id)).size, 3);
-  assert.equal(res.body.post.id, res.body.posts[0].id);
-  assert.equal(res.body.count, 3);
-  assert.equal(res.body.poolSize, 4);
-  assert.equal(headers.get('cache-control'), 'no-store');
 });

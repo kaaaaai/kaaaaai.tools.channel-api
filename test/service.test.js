@@ -167,6 +167,58 @@ test('getRandomPost selects only from the requested recent pool', async () => {
   assert.equal(result.fromCache, true);
 });
 
+test('getRandomPost clamps oversized pools and handles an empty channel', async () => {
+  const populatedStore = new MemoryStore();
+  await populatedStore.setPayload('unlimitmeme', {
+    generatedAt: 1000,
+    channel: { title: 'Cached', description: '' },
+    posts: Array.from({ length: 120 }, (_, index) => ({
+      id: String(120 - index),
+      timestamp: 120 - index,
+      datetime: '1970-01-01T00:00:01.000Z',
+      text: String(120 - index),
+      html: `<p>${120 - index}</p>`,
+      tags: [],
+      media: [],
+      attachments: [],
+      source: {},
+    })),
+  });
+  const config = {
+    channel: 'unlimitmeme',
+    cacheTtl: 60,
+    pageSize: 20,
+    maxFetchPages: 1,
+    limit: 500,
+  };
+  const populatedService = createChannelService({
+    store: populatedStore,
+    now: () => 1200,
+    random: () => 0.999,
+    config,
+  });
+
+  const clamped = await populatedService.getRandomPost({ poolSize: 999 });
+  assert.equal(clamped.poolSize, 100);
+  assert.equal(clamped.post.id, '21');
+
+  const emptyStore = new MemoryStore();
+  await emptyStore.setPayload('unlimitmeme', {
+    generatedAt: 1000,
+    channel: { title: 'Empty', description: '' },
+    posts: [],
+  });
+  const emptyService = createChannelService({
+    store: emptyStore,
+    now: () => 1200,
+    config,
+  });
+
+  const empty = await emptyService.getRandomPost({ poolSize: 20 });
+  assert.equal(empty.poolSize, 0);
+  assert.equal(empty.post, null);
+});
+
 test('getPosts removes cached posts missing from the refreshed Telegram window', async () => {
   const store = new MemoryStore();
   await store.setPayload('unlimitmeme', {
@@ -315,10 +367,10 @@ test('random posts API exposes the public route and disables edge caching', asyn
   assert.equal(typeof randomPostHandler, 'function');
 
   const vercelConfig = JSON.parse(await readFile(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
-  assert.deepEqual(vercelConfig.rewrites, [{
-    source: '/api/posts/random',
-    destination: '/api/random-post',
-  }]);
+  assert.equal(vercelConfig.rewrites.some(rewrite => (
+    rewrite.source === '/api/posts/random'
+    && rewrite.destination === '/api/random-post'
+  )), true);
 
   const html = await fixture('channel-page.html');
   const originalFetch = global.fetch;

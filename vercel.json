@@ -1,4 +1,10 @@
 {
+  "rewrites": [
+    {
+      "source": "/api/posts/random",
+      "destination": "/api/random-post"
+    }
+  ],
   "functions": {
     "api/*.js": {
       "maxDuration": 10

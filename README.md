@@ -22,6 +22,7 @@ Companion Hexo plugin: [Kaaaaai/kaaaaai.tools.hexo-bb-channel](https://github.co
 - Redis-backed cache with stale fallback
 - Manual refresh endpoint protected by `REFRESH_SECRET`
 - Pagination for static-blog timelines
+- Random selection from a recent-post pool
 - Real Telegram hashtag entity extraction
 - Image and file attachment metadata
 - CORS allowlist for blog domains
@@ -163,6 +164,27 @@ Response:
     "hasNext": true,
     "hasPrev": false
   },
+  "generatedAt": 1760000000000,
+  "fromCache": true,
+  "stale": false
+}
+```
+
+### `GET /api/posts/random`
+
+Returns one random post from the most recent pool. `pool_size` defaults to `PAGE_SIZE` and is clamped to the same 1–100 range as regular pagination.
+
+```http
+GET /api/posts/random?pool_size=20
+```
+
+The `post` field uses the same normalized post shape as `/api/posts`; it is `null` when the channel has no posts.
+
+```json
+{
+  "channel": { "title": "Channel title", "description": "" },
+  "post": { "id": "101", "text": "Hello" },
+  "poolSize": 20,
   "generatedAt": 1760000000000,
   "fromCache": true,
   "stale": false

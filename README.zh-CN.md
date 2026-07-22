@@ -22,6 +22,7 @@
 - Redis 缓存，刷新失败时可回退旧缓存
 - 使用 `REFRESH_SECRET` 保护手动刷新接口
 - 支持静态博客时间流分页
+- 支持从最近消息池随机返回一条消息
 - 基于 Telegram 原生 entity 提取 hashtag
 - 支持图片和文件附件元数据
 - 支持 CORS 域名白名单
@@ -163,6 +164,27 @@ GET /api/posts?page=1&page_size=20
     "hasNext": true,
     "hasPrev": false
   },
+  "generatedAt": 1760000000000,
+  "fromCache": true,
+  "stale": false
+}
+```
+
+### `GET /api/posts/random`
+
+从最近的消息池中随机返回一条消息。`pool_size` 默认使用 `PAGE_SIZE`，并与普通分页一样限制在 1 到 100 之间。
+
+```http
+GET /api/posts/random?pool_size=20
+```
+
+响应中的 `post` 使用与 `/api/posts` 相同的标准化消息结构；频道没有消息时为 `null`。
+
+```json
+{
+  "channel": { "title": "Channel title", "description": "" },
+  "post": { "id": "101", "text": "Hello" },
+  "poolSize": 20,
   "generatedAt": 1760000000000,
   "fromCache": true,
   "stale": false

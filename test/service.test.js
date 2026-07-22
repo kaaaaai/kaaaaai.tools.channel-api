@@ -130,6 +130,43 @@ test('getPosts refreshes stale cache, merges new posts, and paginates', async ()
   assert.equal(secondPage.fromCache, true);
 });
 
+test('getRandomPost selects only from the requested recent pool', async () => {
+  const store = new MemoryStore();
+  await store.setPayload('unlimitmeme', {
+    generatedAt: 1000,
+    channel: { title: 'Cached', description: '' },
+    posts: [
+      { id: '4', timestamp: 4000, datetime: '1970-01-01T00:00:04.000Z', text: 'four', html: '<p>four</p>', tags: [], media: [], attachments: [], source: {} },
+      { id: '3', timestamp: 3000, datetime: '1970-01-01T00:00:03.000Z', text: 'three', html: '<p>three</p>', tags: [], media: [], attachments: [], source: {} },
+      { id: '2', timestamp: 2000, datetime: '1970-01-01T00:00:02.000Z', text: 'two', html: '<p>two</p>', tags: [], media: [], attachments: [], source: {} },
+      { id: '1', timestamp: 1000, datetime: '1970-01-01T00:00:01.000Z', text: 'one', html: '<p>one</p>', tags: [], media: [], attachments: [], source: {} },
+    ],
+  });
+
+  const service = createChannelService({
+    store,
+    now: () => 1200,
+    random: () => 0.75,
+    fetchHtml: async () => {
+      throw new Error('should not fetch');
+    },
+    config: {
+      channel: 'unlimitmeme',
+      cacheTtl: 60,
+      pageSize: 20,
+      maxFetchPages: 1,
+      limit: 100,
+    },
+  });
+
+  assert.equal(typeof service.getRandomPost, 'function');
+  const result = await service.getRandomPost({ poolSize: 2 });
+
+  assert.equal(result.post.id, '3');
+  assert.equal(result.poolSize, 2);
+  assert.equal(result.fromCache, true);
+});
+
 test('getPosts removes cached posts missing from the refreshed Telegram window', async () => {
   const store = new MemoryStore();
   await store.setPayload('unlimitmeme', {
@@ -267,5 +304,61 @@ test('posts API disables edge caching so Redis freshness controls updates', asyn
   }
 
   assert.equal(res.statusCode, 200);
+  assert.equal(headers.get('cache-control'), 'no-store');
+});
+
+test('random posts API exposes the public route and disables edge caching', async () => {
+  let randomPostHandler;
+  try {
+    ({ default: randomPostHandler } = await import('../api/random-post.js'));
+  } catch {}
+  assert.equal(typeof randomPostHandler, 'function');
+
+  const vercelConfig = JSON.parse(await readFile(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
+  assert.deepEqual(vercelConfig.rewrites, [{
+    source: '/api/posts/random',
+    destination: '/api/random-post',
+  }]);
+
+  const html = await fixture('channel-page.html');
+  const originalFetch = global.fetch;
+  const originalRandom = Math.random;
+  global.fetch = async () => ({
+    ok: true,
+    text: async () => html,
+  });
+  Math.random = () => 0;
+
+  const headers = new Map();
+  const res = {
+    statusCode: 0,
+    body: undefined,
+    setHeader(name, value) {
+      headers.set(name.toLowerCase(), value);
+    },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    },
+  };
+
+  try {
+    await randomPostHandler({
+      method: 'GET',
+      headers: {},
+      query: { pool_size: '2' },
+    }, res);
+  } finally {
+    global.fetch = originalFetch;
+    Math.random = originalRandom;
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.post.id, '101');
+  assert.equal(res.body.poolSize, 2);
   assert.equal(headers.get('cache-control'), 'no-store');
 });

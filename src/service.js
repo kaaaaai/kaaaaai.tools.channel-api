@@ -77,35 +77,58 @@ async function refreshPayload(config, fetchHtml, now, previous) {
   return { generatedAt: now(), channel, posts };
 }
 
-export function createChannelService({ store, config, fetchHtml = fetchTelegramHtml, now = () => Date.now() }) {
+export function createChannelService({
+  store,
+  config,
+  fetchHtml = fetchTelegramHtml,
+  now = () => Date.now(),
+  random = Math.random,
+}) {
+  const getPosts = async ({ page = 1, pageSize = config.pageSize, refresh = false } = {}) => {
+    const cached = await store.getPayload(config.channel);
+    const canUseCache = cached && !refresh && isFresh(cached, config.cacheTtl, now);
+    if (canUseCache) return buildResponse(cached, page, pageSize, { fromCache: true });
+
+    try {
+      const refreshOperation = async () => {
+        const latestCached = await store.getPayload(config.channel);
+        const latestCanUseCache = latestCached && !refresh && isFresh(latestCached, config.cacheTtl, now);
+        if (latestCanUseCache) return latestCached;
+
+        const payload = await refreshPayload(config, fetchHtml, now, latestCached || cached);
+        await store.setPayload(config.channel, payload);
+        return payload;
+      };
+      const payload = typeof store.withRefreshLock === 'function'
+        ? await store.withRefreshLock(config.channel, refreshOperation)
+        : await refreshOperation();
+      return buildResponse(payload, page, pageSize, { fromCache: payload === cached });
+    } catch (error) {
+      if (!cached) throw error;
+      return buildResponse(cached, page, pageSize, {
+        fromCache: true,
+        stale: true,
+        error: error.message || 'Refresh failed',
+      });
+    }
+  };
+
+  const getRandomPost = async ({ poolSize = config.pageSize } = {}) => {
+    const result = await getPosts({ page: 1, pageSize: poolSize });
+    const index = result.posts.length ? Math.floor(random() * result.posts.length) : -1;
+    return {
+      channel: result.channel,
+      post: index >= 0 ? result.posts[index] : null,
+      poolSize: result.posts.length,
+      generatedAt: result.generatedAt,
+      fromCache: result.fromCache,
+      stale: result.stale,
+      ...(result.error ? { error: result.error } : {}),
+    };
+  };
+
   return {
-    async getPosts({ page = 1, pageSize = config.pageSize, refresh = false } = {}) {
-      const cached = await store.getPayload(config.channel);
-      const canUseCache = cached && !refresh && isFresh(cached, config.cacheTtl, now);
-      if (canUseCache) return buildResponse(cached, page, pageSize, { fromCache: true });
-
-      try {
-        const refreshOperation = async () => {
-          const latestCached = await store.getPayload(config.channel);
-          const latestCanUseCache = latestCached && !refresh && isFresh(latestCached, config.cacheTtl, now);
-          if (latestCanUseCache) return latestCached;
-
-          const payload = await refreshPayload(config, fetchHtml, now, latestCached || cached);
-          await store.setPayload(config.channel, payload);
-          return payload;
-        };
-        const payload = typeof store.withRefreshLock === 'function'
-          ? await store.withRefreshLock(config.channel, refreshOperation)
-          : await refreshOperation();
-        return buildResponse(payload, page, pageSize, { fromCache: payload === cached });
-      } catch (error) {
-        if (!cached) throw error;
-        return buildResponse(cached, page, pageSize, {
-          fromCache: true,
-          stale: true,
-          error: error.message || 'Refresh failed',
-        });
-      }
-    },
+    getPosts,
+    getRandomPost,
   };
 }
